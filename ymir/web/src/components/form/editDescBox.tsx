@@ -4,9 +4,10 @@ import t from '@/utils/t'
 import EditBox, { RefProps } from './editBox'
 import useFetch from '@/hooks/useFetch'
 import { forwardRef, useEffect } from 'react'
+import { Result } from '@/constants'
 
 interface Props {
-  record?: YModels.Result
+  record?: Result
   type?: string
   max?: number
   handle?: Function
@@ -16,9 +17,9 @@ const EditDescBox = forwardRef<RefProps, Props>(({ type = 'dataset', record, max
   const [updated, updateResult] = useFetch(`${type}/updateVersion`)
   const description = record?.description || ''
 
-  useEffect(() => handle && handle(updated), [updated])
+  useEffect(() => updated && handle && handle(updated), [updated])
 
-  function update(record: YModels.Result, values: any) {
+  function update(record: Result, values: any) {
     const desc = values.description.trim()
     if (description === desc) {
       return

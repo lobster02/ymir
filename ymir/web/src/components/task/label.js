@@ -68,8 +68,8 @@ function Label({ query = {}, hidden, ok = () => {}, bottom }) {
     result && ok(result)
   }
 
-  function docChange(files, docFile) {
-    setDoc(files.length ? location.protocol + '//' + location.host + docFile : '')
+  function docChange({ fileList }) {
+    setDoc(fileList.length ? location.protocol + '//' + location.host + fileList[0].url : '')
   }
 
   function onFinishFailed(errorInfo) {
@@ -170,7 +170,7 @@ function Label({ query = {}, hidden, ok = () => {}, bottom }) {
               },
             ]}
           >
-            <UserKeywordsSelector />
+            <UserKeywordsSelector placeholder={t('task.label.form.target.label')} />
           </Item>
           <KeepAnnotations />
           <Item label={t('task.label.form.desc.label')} name="desc">

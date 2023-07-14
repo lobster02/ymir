@@ -46,6 +46,9 @@ import { ModuleType } from '@/pages/project/components/ListHoc'
 import useRequest from '@/hooks/useRequest'
 import StrongTitle from '../table/columns/StrongTitle'
 import { IdMap, List } from '@/models/typings/common.d'
+import { ModelGroup as ModelGroupType, Model, Iteration, Project, Result } from '@/constants'
+import IterationRoundTag from '../table/IterationRoundTag'
+import IterationTypeTag from '../table/IterationTypeTag'
 
 type IsType = {
   isInitModel?: boolean
@@ -55,18 +58,17 @@ type ExtraLabel = {
   iterationLabel?: string
   iterationRound?: number
 }
-type ModelType = YModels.Model & ExtraLabel & IsType
-type ModelGroup = YModels.ModelGroup & ExtraLabel & IsType
+type ModelType = Model & ExtraLabel & IsType
+type ModelGroup = ModelGroupType & ExtraLabel & IsType
 type Models = IdMap<ModelType[]>
 
 const { useForm } = Form
 
-const Model: ModuleType = ({ pid, project, iterations, groups }) => {
+const ModelList: ModuleType = ({ pid, project, iterations, groups }) => {
   const history = useHistory()
   const location: Location = useLocation()
   const name = location.query?.name
   const [models, setModels] = useState<ModelGroup[]>([])
-  const [modelVersions, setModelVersions] = useState<Models>({})
   const [total, setTotal] = useState(1)
   const [selectedVersions, setSelectedVersions] = useState<{ selected: number[]; versions: { [gid: number]: number[] } }>({ selected: [], versions: {} })
   const [form] = useForm()
@@ -80,14 +82,14 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
   const terminateRef = useRef<TRefProps>(null)
   const generateRerun = useRerunAction()
   const [publish, publishResult] = usePublish()
-  const [editingModel, setEditingModel] = useState<YModels.Model>()
+  const [editingModel, setEditingModel] = useState<Model>()
   const {
     versions,
     query,
     models: { [pid]: modelList },
   } = useSelector(({ model }) => model)
-  const { run: getModels } = useRequest<List<YModels.ModelGroup>, [{ pid: number; query: YParams.ModelsQuery }]>('model/getModelGroups')
-  const { run: getVersions } = useRequest<List<YModels.Model>, [{ gid: number; force?: boolean }]>('model/getModelVersions')
+  const { run: getModels } = useRequest<List<ModelGroup>, [{ pid: number; query: YParams.ModelsQuery }]>('model/getModelGroups')
+  const { run: getVersions } = useRequest<List<Model>, [{ gid: number; force?: boolean }]>('model/getModelVersions')
   const { run: updateQuery } = useRequest('model/updateQuery')
   const { run: resetQuery } = useRequest('model/resetQuery')
 
@@ -104,10 +106,9 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
   }, [groups])
 
   useEffect(() => {
-    const mds = setGroupLabelsByProject(modelList?.items, project)
-    setModels(mds)
+    setModels(modelList?.items || [])
     setTotal(modelList?.total || 1)
-  }, [modelList, project])
+  }, [modelList])
 
   useEffect(() => {
     Object.keys(versions).forEach((gid) => {
@@ -128,14 +129,6 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
   }, [visibles])
 
   useEffect(() => {
-    let dvs = setVersionLabelsByProject(versions, project)
-    if (iterations?.length) {
-      dvs = setVersionLabelsByIterations(versions, iterations)
-    }
-    setModelVersions(dvs)
-  }, [versions, project, iterations])
-
-  useEffect(() => {
     if (name) {
       updateQuery({ ...query, name })
       form.setFieldsValue({ name })
@@ -151,7 +144,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
 
   useEffect(() => {
     const selected = selectedVersions.selected
-    const mvs = Object.values(modelVersions)
+    const mvs = Object.values(versions)
       .flat()
       .filter((version) => selected.includes(version.id))
     const hashs = mvs.map((version) => version.task.hash)
@@ -169,7 +162,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
       title: <StrongTitle label="model.column.name" />,
       dataIndex: 'versionName',
       className: styles[`column_name`],
-      render: (name, { id, description, projectLabel, iterationLabel }) => {
+      render: (name, { id, description }) => {
         const popContent = <DescPop description={description} style={{ maxWidth: '30vw' }} />
         const content = (
           <Row>
@@ -177,8 +170,8 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
               <Link to={`/home/project/${pid}/model/${id}`}>{name}</Link>
             </Col>
             <Col flex={'50px'}>
-              {projectLabel ? <div className={styles.extraTag}>{projectLabel}</div> : null}
-              {iterationLabel ? <div className={styles.extraIterTag}>{iterationLabel}</div> : null}
+              <IterationTypeTag project={project} id={id} model />
+              <IterationRoundTag iterations={iterations} id={id} model />
             </Col>
           </Row>
         )
@@ -200,7 +193,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
     {
       title: <StrongTitle label="model.column.stage" />,
       dataIndex: 'recommendStage',
-      render: (_, record) => (validState(record.state) ? <EditStageCell record={record} saveHandle={updateModelVersion} /> : null),
+      render: (_, record) => (validState(record.state) ? <EditStageCell record={record} /> : null),
       // align: 'center',
       width: 300,
     },
@@ -228,7 +221,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
     },
   ]
 
-  const hideHidden = ({ state, id }: YModels.Model) => readyState(state) || project?.hiddenModels?.includes(id)
+  const hideHidden = ({ state, id }: Model) => readyState(state) || project?.hiddenModels?.includes(id)
 
   const listChange = (current: number, pageSize: number) => {
     const limit = pageSize
@@ -236,73 +229,8 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
     updateQuery({ ...query, current, limit, offset })
   }
 
-  function updateModelVersion(result: YModels.Model) {
-    setModelVersions((mvs) => {
-      return {
-        ...mvs,
-        [result.groupId]: mvs[result.groupId].map((version) => {
-          return version.id === result.id ? result : version
-        }),
-      }
-    })
-  }
-  
   function toggleVersions(id: number, force?: boolean) {
     setVisibles((old) => ({ ...old, [id]: force || (typeof old[id] !== 'undefined' && !old[id]) }))
-  }
-
-  function setVersionLabelsByIterations(versions: Models, iterations: YModels.Iteration[]) {
-    Object.keys(versions).forEach((gid) => {
-      const list = versions[gid]
-      const updatedList = list.map((item) => {
-        delete item.iterationLabel
-        return setLabelByIterations(item, iterations)
-      })
-      versions[gid] = updatedList
-    })
-    return { ...versions }
-  }
-
-  function setVersionLabelsByProject(versions: Models, project?: YModels.Project) {
-    Object.keys(versions).forEach((gid) => {
-      const list = versions[gid]
-      const updatedList = list.map((item) => {
-        delete item.projectLabel
-        return project?.model ? setLabelByProject(project?.model, 'isInitModel', item) : item
-      })
-      versions[gid] = updatedList
-    })
-    return { ...versions }
-  }
-
-  function setGroupLabelsByProject(items: ModelGroup[] = [], project?: YModels.Project) {
-    return items.map((item) => {
-      delete item.projectLabel
-      return project?.model ? setLabelByProject(project?.model, 'isInitModel', item) : item
-    })
-  }
-
-  function setLabelByProject<T extends ModelType | ModelGroup = ModelType>(id: number, label: keyof IsType, item: T, version = ''): T {
-    const maps = {
-      isInitModel: 'project.tag.model',
-    }
-    item[label] = !!id && item.id === id
-    item.projectLabel = item.projectLabel || (item[label] ? t(maps[label], { version }) : '')
-    return item
-  }
-
-  function setLabelByIterations(item: ModelType, iterations?: YModels.Iteration[]) {
-    const iteration = iterations?.find((iter) =>
-      iter.steps
-        .map(({ resultId }) => resultId)
-        .filter((id) => id)
-        .includes(item.id),
-    )
-    if (iteration) {
-      item.iterationLabel = t('iteration.tag.round', iteration)
-      item.iterationRound = iteration.round
-    }
-    return item
   }
 
   function fetchVersions(id: number | string, force?: boolean) {
@@ -421,7 +349,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
     hideRef.current?.hide([version])
   }
 
-  const hideOk = (result: YModels.Result[]) => {
+  const hideOk = (result: { groupId: number }[]) => {
     result.forEach((item) => fetchVersions(item.groupId, true))
     getData()
     setSelectedVersions({ selected: [], versions: {} })
@@ -441,7 +369,7 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
     terminateRef.current?.confirm(model)
   }
 
-  function terminateOk({}, { groupId }: YModels.Result) {
+  function terminateOk({}, { groupId }: Result) {
     groupId && fetchVersions(groupId, true)
   }
 
@@ -455,19 +383,6 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
           return model
         }),
       )
-    }
-  }
-  const saveDescHandle = (result: ModelType) => {
-    if (result) {
-      setModelVersions((models) => ({
-        ...models,
-        [result.groupId]: models[result.groupId].map((model) => {
-          if (model.id === result.id) {
-            model.description = result.description
-          }
-          return model
-        }),
-      }))
     }
   }
 
@@ -521,7 +436,6 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
               <Col flex={1} onClick={() => toggleVersions(group.id)}>
                 <span className="foldBtn">{visibles[group.id] !== false ? <ArrowDownIcon /> : <ArrowRightIcon />} </span>
                 <span className="groupName">{group.name}</span>
-                {group.projectLabel ? <span className={styles.extraTag}>{group.projectLabel}</span> : null}
               </Col>
               <Col>
                 <Space>
@@ -534,7 +448,6 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
             <div className="groupTable" hidden={visibles[group.id] === false}>
               <Table
                 dataSource={typeof visibles[group.id] === 'undefined' ? (versions[group.id] || []).slice(0, DefaultShowVersionCount) : versions[group.id]}
-                // dataSource={modelVersions[group.id]}
                 rowKey={(record) => record.id}
                 rowSelection={{
                   selectedRowKeys: selectedVersions.versions[group.id],
@@ -599,11 +512,11 @@ const Model: ModuleType = ({ pid, project, iterations, groups }) => {
         {renderGroups}
       </div>
       <EditNameBox ref={editNameBoxRef} type="model" record={current} max={80} handle={saveNameHandle} />
-      <EditDescBox ref={editDescBoxRef} type="model" record={editingModel} handle={saveDescHandle} />
+      <EditDescBox ref={editDescBoxRef} type="model" record={editingModel} />
       <Hide ref={hideRef} type={'model'} msg="model.action.del.confirm.content" ok={hideOk} />
       <Terminate ref={terminateRef} ok={terminateOk} />
     </div>
   )
 }
 
-export default Model
+export default ModelList

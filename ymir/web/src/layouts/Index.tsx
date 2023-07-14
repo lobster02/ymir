@@ -25,7 +25,7 @@ const BasicLayout: FC = ({ children }) => {
 
   useEffect(() => {
     if (!logined) {
-      history.replace(`/login?redirect=${history.location.pathname}`)
+      window.location.href = `/login?redirect=${history.location.pathname}`
       return
     }
     getUserInfo()
@@ -43,18 +43,13 @@ const BasicLayout: FC = ({ children }) => {
         </Header>
         <Layout>
           <LeftMenu></LeftMenu>
-          <Layout>
-            <Content
-              className={commonStyles.content}
-              style={{
-                minHeight: document.documentElement.clientHeight - 60 - 50,
-              }}
-            >
-              {children}
+          <Layout className="layoutContent">
+            <Content className={commonStyles.content}>
+              <div>{children}</div>
+              <Footer className={commonStyles.footer}>
+                <Foot></Foot>
+              </Footer>
             </Content>
-            <Footer className={commonStyles.footer}>
-              <Foot></Foot>
-            </Footer>
           </Layout>
         </Layout>
       </Layout>
